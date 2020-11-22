@@ -1,0 +1,8 @@
+<component name="ArtifactManager">
+  <artifact type="jar" name="KMPF-android">
+    <output-path>F:\Ref\KMP\MultiPlatformShared\KMPF\build\libs</output-path>
+    <root id="archive" name="KMPF-android.jar">
+      <element id="module-output" name="KMPF_androidMain" />
+    </root>
+  </artifact>
+</component>

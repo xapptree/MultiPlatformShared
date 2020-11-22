@@ -1,0 +1,132 @@
+//apply plugin: 'java-library'
+//apply plugin: 'kotlin'
+apply plugin: 'com.android.library'
+apply plugin: 'kotlin-multiplatform'
+apply plugin: 'kotlin-android-extensions'
+
+android {
+    compileSdkVersion 28
+    defaultConfig {
+        minSdkVersion 15
+        targetSdkVersion 28
+        versionCode 1
+        versionName '1.0'
+        testInstrumentationRunner 'android.support.test.runner.AndroidJUnitRunner'
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+    }
+    sourceSets {
+        main {
+            manifest.srcFile 'src/androidMain/AndroidManifest.xml'
+            java.srcDirs = ['src/androidMain/kotlin']
+            res.srcDirs = ['src/androidMain/res']
+        }
+        androidTest {
+            java.srcDirs = ['src/androidTest/kotlin']
+            res.srcDirs = ['src/androidTest/res']
+        }
+    }
+}
+
+dependencies {
+    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
+    implementation 'com.github.xapptree:networkrunner:0.0.7'
+    implementation("io.ktor:ktor-client-okhttp:$ktor_version")
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.3.9'
+}
+
+kotlin {
+    targets {
+        //Xcode sets SDK_NAME environment variable - based on whether the
+        //target device is a simulator or a real device, the preset should vary
+        final def iOSTarget  = System.getenv('SDK_NAME')?.startsWith("iphoneos") \
+                                ? presets.iosArm64 : presets.iosX64
+
+        //outputKinds - FRAMEWORK would mean that the shared code would be exported as a FRAMEWORK
+        // EXECUTABLE - produces a standalone executable that can be used to run as an app
+        fromPreset(iOSTarget, 'ios') {
+            binaries {
+                framework('Shared')
+            }
+        }
+        //create a target for Android from presets.jvm
+        //fromPreset(presets.jvm, 'android')
+//
+    }
+    //we have 3 different sourceSets for common, android and iOS.
+    //each sourceSet can have their own set of dependencies and configurations
+//    android("android") {
+//        // you can also publish both "release" and "debug"
+//        publishLibraryVariants("release")
+//    }
+    android()
+    sourceSets {
+        commonMain {
+            dependencies {
+                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.3.9")
+               implementation kotlin('stdlib-common')
+                implementation("io.ktor:ktor-client-core:$ktor_version")
+               // implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core-common:1.3.9")
+            }
+        }
+        iosMain {
+            dependencies {
+               implementation kotlin('stdlib')
+                implementation("io.ktor:ktor-client-ios:$ktor_version")
+                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core-native:1.3.9")
+            }
+        }
+//        commonTest {
+//            dependencies {
+//                implementation kotlin('test-common')
+//                implementation kotlin('test-annotations-common')
+//            }
+//        }
+//        iosTest {
+//        }
+    }
+}
+configurations {
+    compileClasspath
+}
+
+// This task attaches native framework built from ios module to Xcode project
+// Don't run this task directly,
+// Xcode runs this task itself during its build process when we configure it.
+// make sure all Gradle infrastructure exists (gradle.wrapper, gradlew)
+//and gradlew is in executable mode (chmod +x gradlew)
+task packForXCode(type: Sync) {
+    final File frameworkDir = new File(buildDir, "xcode-frameworks")
+    final String mode = project.findProperty("XCODE_CONFIGURATION")?.toUpperCase() ?: 'DEBUG'
+    final def framework = kotlin.targets.ios.binaries.getFramework("Shared", mode)
+    inputs.property "mode", mode
+    dependsOn framework.linkTask
+    from { framework.outputFile.parentFile }
+    into frameworkDir
+    doLast {
+        new File(frameworkDir, 'gradlew').with {
+            text = "#!/bin/bash\nexport 'JAVA_HOME=${System.getProperty("java.home")}'\ncd '${rootProject.rootDir}'\n./gradlew \$@\n"
+            setExecutable(true)
+        }
+    }
+}
+
+/*
+task iosTest {
+    def device = project.findProperty("iosDevice")?.toString() ?: "iPhone 8"
+    dependsOn kotlin.targets.ios.binaries.getTest('DEBUG').linkTaskName
+    group = JavaBasePlugin.VERIFICATION_GROUP
+    description = "Runs tests for target 'ios' on an iOS simulator"
+
+    doLast {
+        def binary = kotlin.targets.ios.binaries.getTest('DEBUG').outputFile
+        exec {
+            commandLine 'xcrun', 'simctl', 'spawn', device, binary.absolutePath
+        }
+    }
+}
+*/
+tasks.build.dependsOn packForXCode
